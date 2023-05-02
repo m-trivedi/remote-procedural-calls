@@ -53,33 +53,43 @@ int main(int argc, char** argv) {
         // i = last: duplicate of last RPC or duplicate of in progress RPC. Either resend result or send acknowledgement that RPC is being worked on.
         // i < last: old RPC, discard message and do not reply
 
+
+    
+
+        
+
         int flag = 1;
         for (int i = call_table_size - 1; i >= 0; i--) {
-            if (call_table[i].client_id ==arr[1]) {
+            if (call_table[i].client_id == arr[1]) {
                 if (call_table[i].seq_num > arr[2]) {
                     // old RPC, discard message and do not reply
                     flag = 0;
+                    
                 } else if (call_table[i].seq_num == arr[2]) {
-                    if (call_table[i].result != -1) { // doubtful: what if result of a prev get was value -1 ?
+                    if (call_table[i].result != 0) { // doubtful: what if result of a prev get was value -1 ?
                         // resend result to client
+                        flag = 0;
                         char payload[100];
                         sprintf(payload, "%d", call_table[i].result);
                         send_packet(my_socket, my_packet.sock, my_packet.slen, payload, sizeof(payload));
                     } else {
                         // TODO: send acknowledgement
-                        
                     }
                 }
                 break;
             }
         }
 
-        printf("Client ID: %d, Seq Num: %d ", arr[1], arr[2]);
-
         if (flag == 0) {
             // old RPC discard message
             continue;
+        } else {
+            call_table[call_table_size].client_id = arr[1];
+            call_table[call_table_size].seq_num = arr[2];
         }
+
+        printf("Client ID: %d, Seq Num: %d ", arr[1], arr[2]);
+        
 
         // ----------
 
@@ -98,32 +108,30 @@ int main(int argc, char** argv) {
             // send value to client
             char payload[100];
             sprintf(payload, "%d", value);
+
+            call_table[call_table_size].result = value;
+            call_table_size++;
+
             send_packet(my_socket, my_packet.sock, my_packet.slen, payload, sizeof(payload));
 
+            
         } else if (arr[0] == 2) { // put
 
             int key = arr[3];
             int value = arr[4];
 
-            printf("Request to put %d at %d\n", value, key);
+            printf("Request to put %d at %d\n", value, key);    
+
+            call_table[call_table_size].result = value;
+            call_table_size++;
 
             if (put(key, value) != 0) {
                 printf("Error with putting key in array\n");
             }
         }
+
+        
     }
-
-    /*
-
-    Messages arrive with sequence number i
-
-    get last seq_num by iterating the call_table from greatest to lowest index and stop when client_id matches
-
-    i > last: new request - execute RPC and update call table entry
-    i = last: duplicate of last RPC or duplicate of in progress RPC. Either resend result or send acknowledgement that RPC is being worked on.
-    i < last: old RPC, discard message and do not reply
-
-    */
 
     return 0;
 }

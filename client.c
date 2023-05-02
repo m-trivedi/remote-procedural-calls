@@ -13,8 +13,6 @@ send the server a:
 #include "client.h"
 #include "udp.h"
 
-int seq_num = 0;
-
 struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
     printf("Initializing RPC Connection...\n");
 
@@ -31,8 +29,7 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
     populate_sockaddr(AF_INET, dst_port, dst_addr, &addr, &addrlen);
     rpc.dst_addr = *((struct sockaddr *)(&addr));
     rpc.dst_len = addrlen;
-    rpc.seq_number = seq_num;
-    seq_num++;
+    rpc.seq_number = 0;
     
     return rpc;
 }
@@ -42,6 +39,7 @@ void RPC_idle(struct rpc_connection *rpc, int time) {
     char payload[100];
     sprintf(payload, "0 %d %d %d", rpc->client_id, rpc->seq_number, time);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
+    rpc->seq_number++;
 }
 
 // gets the value of a key on the server store
@@ -59,9 +57,8 @@ int RPC_get(struct rpc_connection *rpc, int key) {
         value = atoi(my_packet.buf);
         break;
     }
-
+    rpc->seq_number++;
     return value;
-
 }
 
 // sets the value of a key on the server store
@@ -69,6 +66,7 @@ int RPC_put(struct rpc_connection *rpc, int key, int value) {
     char payload[100];
     sprintf(payload, "2 %d %d %d %d", rpc->client_id, rpc->seq_number, key, value);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
+    rpc->seq_number++;
     return 0;
 }
 
