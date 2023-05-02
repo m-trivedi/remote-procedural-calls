@@ -31,9 +31,7 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
     populate_sockaddr(AF_INET, dst_port, dst_addr, &addr, &addrlen);
     rpc.dst_addr = *((struct sockaddr *)(&addr));
     rpc.dst_len = addrlen;
-
-    // rpc.dst_len = strlen(dst_addr);                               // set dst_len
-    rpc.seq_number = seq_num;                                     // set seq_num
+    rpc.seq_number = seq_num;
     seq_num++;
     
     return rpc;
@@ -41,24 +39,39 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
 
 // Sleeps the server thread for a few seconds
 void RPC_idle(struct rpc_connection *rpc, int time) {
-
+    char payload[100];
+    sprintf(payload, "0%d", time);
+    int payload_length = sizeof(payload);
+    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
 }
 
 // gets the value of a key on the server store
 int RPC_get(struct rpc_connection *rpc, int key) {
-    return 0;
+    char payload[100];
+    sprintf(payload, "1%d", key);
+    int payload_length = sizeof(payload);
+    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
+
+    // start listening for message...
+    int value = 0;
+
+    // this loops infinitely, in future change this to check if timer reaches 0
+    while (1) {
+        struct packet_info my_packet = receive_packet(rpc->recv_socket);
+        value = atoi(my_packet.buf);
+        break;
+    }
+
+    return value;
+
 }
 
 // sets the value of a key on the server store
 int RPC_put(struct rpc_connection *rpc, int key, int value) {
-
     char payload[100];
-    sprintf(payload, "%d.%d", key, value);
-
-    int payload_length = strlen(payload);
-
+    sprintf(payload, "2%d %d", key, value);
+    int payload_length = sizeof(payload);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
-
     return 0;
 }
 
