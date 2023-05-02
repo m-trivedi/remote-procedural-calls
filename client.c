@@ -40,17 +40,15 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
 // Sleeps the server thread for a few seconds
 void RPC_idle(struct rpc_connection *rpc, int time) {
     char payload[100];
-    sprintf(payload, "0%d", time);
-    int payload_length = sizeof(payload);
-    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
+    sprintf(payload, "0 %d %d %d", rpc->client_id, rpc->seq_number, time);
+    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
 }
 
 // gets the value of a key on the server store
 int RPC_get(struct rpc_connection *rpc, int key) {
     char payload[100];
-    sprintf(payload, "1%d", key);
-    int payload_length = sizeof(payload);
-    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
+    sprintf(payload, "1 %d %d %d", rpc->client_id, rpc->seq_number, key);
+    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
 
     // start listening for message...
     int value = 0;
@@ -69,13 +67,12 @@ int RPC_get(struct rpc_connection *rpc, int key) {
 // sets the value of a key on the server store
 int RPC_put(struct rpc_connection *rpc, int key, int value) {
     char payload[100];
-    sprintf(payload, "2%d %d", key, value);
-    int payload_length = sizeof(payload);
-    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, payload_length);
+    sprintf(payload, "2 %d %d %d %d", rpc->client_id, rpc->seq_number, key, value);
+    send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
     return 0;
 }
 
 // closes the RPC connection to the server
 void RPC_close(struct rpc_connection *rpc) {
-    
+    close_socket(rpc->recv_socket);
 }
