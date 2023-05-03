@@ -54,10 +54,6 @@ int main(int argc, char** argv) {
         // i < last: old RPC, discard message and do not reply
 
 
-    
-
-        
-
         int flag = 1;
         for (int i = call_table_size - 1; i >= 0; i--) {
             if (call_table[i].client_id == arr[1]) {
@@ -66,14 +62,16 @@ int main(int argc, char** argv) {
                     flag = 0;
                     
                 } else if (call_table[i].seq_num == arr[2]) {
-                    if (call_table[i].result != 0) { // doubtful: what if result of a prev get was value -1 ?
+                    if (call_table[i].result != 0) { // doubtful: what if result of a prev get was value 0 ?
                         // resend result to client
                         flag = 0;
                         char payload[100];
                         sprintf(payload, "%d", call_table[i].result);
                         send_packet(my_socket, my_packet.sock, my_packet.slen, payload, sizeof(payload));
                     } else {
-                        // TODO: send acknowledgement
+                        // send acknowledgement
+                        char payload[100] = "ACK";
+                        send_packet(my_socket, my_packet.sock, my_packet.slen, payload, sizeof(payload));
                     }
                 }
                 break;

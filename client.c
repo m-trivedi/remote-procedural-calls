@@ -10,6 +10,8 @@ send the server a:
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
 #include "client.h"
 #include "udp.h"
 
@@ -21,8 +23,7 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
     rpc.recv_socket = init_socket(src_port);                      // initialize socket
     rpc.client_id = rand();                                       // set random client id
 
-    // in order to populate the sockaddress the below code is picked from the image (now broken)
-    // on the canvas project description page
+    // in order to populate the sockaddress
 
     struct sockaddr_storage addr;
     socklen_t addrlen;
@@ -52,11 +53,22 @@ int RPC_get(struct rpc_connection *rpc, int key) {
     int value = 0;
 
     // this loops infinitely, in future change this to check if timer reaches 0
-    while (1) {
-        struct packet_info my_packet = receive_packet(rpc->recv_socket);
-        value = atoi(my_packet.buf);
-        break;
+    int retries = 0;
+    while (retries < RETRY_COUNT) {
+        struct packet_info my_packet = receive_packet_timeout(rpc->recv_socket, TIMEOUT_TIME);
+        if (my_packet.recv_len < 0) {
+            // timed out
+        } else if (strcmp("ACK", my_packet.buf) == 0) {
+            // received acknowledgement
+            sleep(1);
+            printf("sleeping");
+        } else {
+            value = atoi(my_packet.buf);
+            break;
+        }
+        retries++;
     }
+
     rpc->seq_number++;
     return value;
 }
