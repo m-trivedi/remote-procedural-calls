@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include "udp.h"
 #include "server_functions.h"
 
@@ -12,6 +13,50 @@ struct call_info {
 
 struct call_info call_table[200];
 int call_table_size = 0;
+
+struct thread_data {
+    int key;
+    int value;
+    struct packet_info my_pac;
+    struct socket my_soc;
+};
+
+// Initialize the lock
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void *my_idle(void *arg) {
+    struct thread_data *data = (struct thread_data *) arg;
+    int time = data->key;
+    idle(time);
+    return NULL;
+}
+
+// my_get for threads
+void *my_get(void *arg) {
+    struct thread_data *data = (struct thread_data *) arg;
+    int key = data->key;
+    pthread_mutex_lock(&lock);
+
+    data->value = get(key);
+    // send value to client
+    char payload[100];
+    sprintf(payload, "%d", data->value);
+    send_packet(data->my_soc, data->my_pac.sock, data->my_pac.slen, payload, sizeof(payload));
+    
+    pthread_mutex_unlock(&lock);
+    return NULL;
+}
+
+// my_put for threads
+void *my_put(void *arg) {
+    struct thread_data *data = (struct thread_data *) arg;
+    int key = data->key;
+    int value = data->value;
+    pthread_mutex_lock(&lock);
+    put(key, value);
+    pthread_mutex_unlock(&lock);
+    return NULL;
+}
 
 int main(int argc, char** argv) {
 
@@ -35,35 +80,24 @@ int main(int argc, char** argv) {
         int i = 0;
         int arr[5];
 
-        // arr[0] -> function to execute: idle (0), get(1), put(2)
-        // arr[1] -> client id
-        // arr[2] -> seq num
-        // arr[3] -> key / time
-        // arr[4] -> value
-
         char * token = strtok(my_packet.buf, " ");
         while( token != NULL ) {
             arr[i] = atoi(token);
             token = strtok(NULL, " ");
             i++;
         }
-
-        // Before executing any request, first compare this client's last seq num and this seq num
-        // i > last: new request - execute RPC and update call table entry
-        // i = last: duplicate of last RPC or duplicate of in progress RPC. Either resend result or send acknowledgement that RPC is being worked on.
-        // i < last: old RPC, discard message and do not reply
-
-
+        printf("Client ID: %d, Seq Num: %d -> \n", arr[1], arr[2]);
+    
         int flag = 1;
         for (int i = call_table_size - 1; i >= 0; i--) {
             if (call_table[i].client_id == arr[1]) {
                 if (call_table[i].seq_num > arr[2]) {
                     // old RPC, discard message and do not reply
                     flag = 0;
-                    
                 } else if (call_table[i].seq_num == arr[2]) {
-                    if (call_table[i].result != 0) { // doubtful: what if result of a prev get was value 0 ?
+                    if (call_table[i].result != -1) { // doubtful: what if result of a prev get was value -1 ?
                         // resend result to client
+                        printf("Resending Result: %d\n", call_table[i].result);
                         flag = 0;
                         char payload[100];
                         sprintf(payload, "%d", call_table[i].result);
@@ -81,55 +115,43 @@ int main(int argc, char** argv) {
         if (flag == 0) {
             // old RPC discard message
             continue;
-        } else {
-            call_table[call_table_size].client_id = arr[1];
-            call_table[call_table_size].seq_num = arr[2];
         }
+        call_table[call_table_size].client_id = arr[1];
+        call_table[call_table_size].seq_num = arr[2];
+        call_table[call_table_size].result = -1; // -1 means we're working on the request
 
-        printf("Client ID: %d, Seq Num: %d ", arr[1], arr[2]);
-        
-
-        // ----------
+        // initialize thread
+        pthread_t my_thread;
+        struct thread_data arg;
+        arg.key = arr[3];
+        arg.value = arr[4];
 
         if (arr[0] == 0) { // idle
 
-            int time = arr[3];
-            printf("Request to idle for %d seconds\n", time);
-            idle(time);
+            printf("Request to idle for %d seconds\n", arg.key);
+            pthread_create(&my_thread, NULL, my_idle, &arg);
 
         } else if (arr[0] == 1) { // get
 
-            int key = arr[3];
-            printf("Request to get %d\n", key);
-            int value = get(key);
-            
-            // send value to client
-            char payload[100];
-            sprintf(payload, "%d", value);
+            printf("Request to get %d\n", arg.key);
 
-            call_table[call_table_size].result = value;
-            call_table_size++;
+            arg.my_soc = my_socket;
+            arg.my_pac = my_packet;
 
-            send_packet(my_socket, my_packet.sock, my_packet.slen, payload, sizeof(payload));
-
+            pthread_create(&my_thread, NULL, my_get, &arg);
             
         } else if (arr[0] == 2) { // put
 
-            int key = arr[3];
-            int value = arr[4];
-
-            printf("Request to put %d at %d\n", value, key);    
-
-            call_table[call_table_size].result = value;
-            call_table_size++;
-
-            if (put(key, value) != 0) {
-                printf("Error with putting key in array\n");
-            }
+            printf("Request to put %d at %d\n", arg.value, arg.key);
+            pthread_create(&my_thread, NULL, my_put, &arg);
+            
         }
 
-        
-    }
+        pthread_join(my_thread, NULL);
 
+        // update call table entry result
+        call_table[call_table_size].result = arg.value;
+        call_table_size++;
+    }
     return 0;
 }

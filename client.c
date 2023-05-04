@@ -11,6 +11,7 @@ send the server a:
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <time.h>
 #include "client.h"
 #include "udp.h"
@@ -20,11 +21,14 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
 
     struct rpc_connection rpc;
 
-    rpc.recv_socket = init_socket(src_port);                      // initialize socket
-    rpc.client_id = rand();                                       // set random client id
+    rpc.recv_socket = init_socket(src_port);                      // initialize 
+    
+    // SET CLIENT ID USING TIME FUNCTION (BY PIAZZA)
+    //struct timeval current_time;
+    srand(time(NULL));
+    rpc.client_id = rand();
 
-    // in order to populate the sockaddress
-
+    // POPULATE SOCKADDR
     struct sockaddr_storage addr;
     socklen_t addrlen;
     populate_sockaddr(AF_INET, dst_port, dst_addr, &addr, &addrlen);
@@ -37,6 +41,7 @@ struct rpc_connection RPC_init(int src_port, int dst_port, char dst_addr[]) {
 
 // Sleeps the server thread for a few seconds
 void RPC_idle(struct rpc_connection *rpc, int time) {
+    printf("Asking Server to idle...\n");
     char payload[100];
     sprintf(payload, "0 %d %d %d", rpc->client_id, rpc->seq_number, time);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
@@ -45,12 +50,13 @@ void RPC_idle(struct rpc_connection *rpc, int time) {
 
 // gets the value of a key on the server store
 int RPC_get(struct rpc_connection *rpc, int key) {
+    printf("Asking Server to get...\n");
     char payload[100];
     sprintf(payload, "1 %d %d %d", rpc->client_id, rpc->seq_number, key);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
 
     // start listening for message...
-    int value = 0;
+    int value = -10;
 
     // this loops infinitely, in future change this to check if timer reaches 0
     int retries = 0;
@@ -58,12 +64,14 @@ int RPC_get(struct rpc_connection *rpc, int key) {
         struct packet_info my_packet = receive_packet_timeout(rpc->recv_socket, TIMEOUT_TIME);
         if (my_packet.recv_len < 0) {
             // timed out
+            printf("timed out");
         } else if (strcmp("ACK", my_packet.buf) == 0) {
             // received acknowledgement
             sleep(1);
             printf("sleeping");
         } else {
             value = atoi(my_packet.buf);
+            printf("Received from server: %d\n", value);
             break;
         }
         retries++;
@@ -75,6 +83,7 @@ int RPC_get(struct rpc_connection *rpc, int key) {
 
 // sets the value of a key on the server store
 int RPC_put(struct rpc_connection *rpc, int key, int value) {
+    printf("Asking Server to put...\n");
     char payload[100];
     sprintf(payload, "2 %d %d %d %d", rpc->client_id, rpc->seq_number, key, value);
     send_packet(rpc->recv_socket, rpc->dst_addr, rpc->dst_len, payload, sizeof(payload));
