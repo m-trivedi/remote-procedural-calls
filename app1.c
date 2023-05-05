@@ -2,7 +2,7 @@
 #include "client.h"
 
 int main() {
-    struct rpc_connection rpc = RPC_init(1236, 8888, "127.0.0.1");
+    struct rpc_connection rpc = RPC_init(1236, 8889, "127.0.0.1");
 
     RPC_put(&rpc, 1, 1234);
     rpc.seq_number--;

@@ -3,7 +3,7 @@
 #include "client.h"
 
 int main(){
-    struct rpc_connection rpc = RPC_init(1237, 8888, "127.0.0.1");
+    struct rpc_connection rpc = RPC_init(1237, 8889, "127.0.0.1");
 
     RPC_idle(&rpc, 5);
     RPC_put(&rpc, 10, 10);
